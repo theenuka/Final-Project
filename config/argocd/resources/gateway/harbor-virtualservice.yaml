@@ -1,0 +1,21 @@
+---
+# VirtualService for Harbor Registry
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: harbor
+  namespace: harbor
+spec:
+  hosts:
+    - harbor.phoenix.com
+  gateways:
+    - istio-system/phoenix-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: harbor-portal.harbor.svc.cluster.local
+            port:
+              number: 80

@@ -1,0 +1,232 @@
+name: Phoenix Hotel - CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Hotel Reservation/**'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Hotel Reservation/**'
+
+env:
+  HARBOR_HOST: harbor.phoenix.com
+  HARBOR_PROJECT: library
+  NODE_VERSION: '18'
+  TRIVY_VERSION: '0.48.0'
+
+jobs:
+  # ============================================================================
+  # JOB 1: Build, Test, Scan, and Push Microservices
+  # ============================================================================
+  build-and-push:
+    name: Build & Push - ${{ matrix.name }}
+    runs-on: ubuntu-latest
+
+    # Matrix strategy for multiple microservices with Specific Paths
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: booking-service
+            path: Hotel Reservation/backend/services/booking-service
+          - name: search-service
+            path: Hotel Reservation/backend/services/search-service
+          - name: identity-service
+            path: Hotel Reservation/backend/services/identity-service
+          - name: notification-service
+            path: Hotel Reservation/backend/services/notification-service
+          - name: hotel-service
+            path: Hotel Reservation/backend/services/hotel-service
+          - name: api-gateway
+            path: Hotel Reservation/backend/services/api-gateway
+
+    # Set working directory dynamically based on the matrix path
+    defaults:
+      run:
+        working-directory: ${{ matrix.path }}
+
+    steps:
+      # ------------------------------------------------------------------------
+      # STEP 1: Checkout Code
+      # ------------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ------------------------------------------------------------------------
+      # STEP 2: Setup Node.js
+      # ------------------------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.path }}/package-lock.json
+
+      # ------------------------------------------------------------------------
+      # STEP 3: Install Dependencies
+      # ------------------------------------------------------------------------
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies for ${{ matrix.name }}..."
+          npm ci
+
+      # ------------------------------------------------------------------------
+      # STEP 4: Run Linting (Optional - continues on error)
+      # ------------------------------------------------------------------------
+      - name: Run ESLint
+        run: |
+          echo "🔍 Running ESLint..."
+          npm run lint || echo "::warning::ESLint found issues in ${{ matrix.name }}"
+        continue-on-error: true
+
+      # ------------------------------------------------------------------------
+      # STEP 5: Run Unit Tests
+      # ------------------------------------------------------------------------
+      - name: Run unit tests
+        run: |
+          echo "🧪 Running unit tests for ${{ matrix.name }}..."
+          # Only run tests if test script exists in package.json
+          if grep -q '"test":' package.json; then
+            npm test -- --passWithNoTests
+          else
+            echo "⚠️ No test script found, skipping..."
+          fi
+        env:
+          NODE_ENV: test
+
+      # ------------------------------------------------------------------------
+      # STEP 6: SAST - Security Scan Source Code
+      # ------------------------------------------------------------------------
+      - name: Install Trivy
+        run: |
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy
+        working-directory: . # Run in root
+
+      - name: Run Trivy filesystem scan (SAST)
+        run: |
+          echo "🔒 Running Trivy scan on source code..."
+          trivy fs . --severity HIGH,CRITICAL --format table --exit-code 0 --no-progress
+        continue-on-error: true
+
+      # ------------------------------------------------------------------------
+      # STEP 7: Configure Docker for Insecure Registry (Self-Signed Cert)
+      # ------------------------------------------------------------------------
+      - name: Configure Docker daemon for Harbor
+        run: |
+          echo "🔧 Configuring Docker to trust Harbor..."
+          echo '{ "insecure-registries": ["${{ secrets.HARBOR_HOST }}"] }' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+          timeout 30 bash -c 'until docker info >/dev/null 2>&1; do sleep 1; done'
+        working-directory: . # Run in root
+
+      # ------------------------------------------------------------------------
+      # STEP 8: Login to Harbor
+      # ------------------------------------------------------------------------
+      - name: Login to Harbor registry
+        run: |
+          echo "${{ secrets.HARBOR_PASSWORD }}" | docker login ${{ secrets.HARBOR_HOST }} --username ${{ secrets.HARBOR_USER }} --password-stdin
+        working-directory: . # Run in root
+
+      # ------------------------------------------------------------------------
+      # STEP 9: Build Docker Image
+      # ------------------------------------------------------------------------
+      - name: Build Docker image
+        run: |
+          IMAGE_NAME="${{ secrets.HARBOR_HOST }}/${{ env.HARBOR_PROJECT }}/${{ matrix.name }}"
+          FULL_IMAGE="${IMAGE_NAME}:${{ github.sha }}"
+          
+          echo "🐳 Building: ${FULL_IMAGE}"
+          
+          docker build -t "${FULL_IMAGE}" .
+          
+          # Export env vars for next steps
+          echo "FULL_IMAGE=${FULL_IMAGE}" >> $GITHUB_ENV
+
+      # ------------------------------------------------------------------------
+      # STEP 10: Scan Image & Push
+      # ------------------------------------------------------------------------
+      - name: Scan Docker image
+        run: |
+          trivy image --severity HIGH,CRITICAL --format table --exit-code 0 "${{ env.FULL_IMAGE }}"
+        working-directory: .
+
+      - name: Push Docker image
+        run: |
+          docker push "${{ env.FULL_IMAGE }}"
+        working-directory: .
+
+      # ------------------------------------------------------------------------
+      # STEP 11: Cleanup
+      # ------------------------------------------------------------------------
+      - name: Cleanup
+        run: docker rmi "${{ env.FULL_IMAGE }}" || true
+        working-directory: .
+        if: always()
+
+  # ============================================================================
+  # JOB 2: Update GitOps Configuration (Deploy)
+  # ============================================================================
+  update-gitops:
+    name: Update GitOps Configuration
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Update image tags in ArgoCD manifests
+        run: |
+          NEW_TAG="${{ github.sha }}"
+          HARBOR_REGISTRY="${{ secrets.HARBOR_HOST }}/${{ env.HARBOR_PROJECT }}"
+          
+          # List of services to update in the config file
+          SERVICES=("booking-service" "search-service" "identity-service" "notification-service" "hotel-service" "api-gateway")
+
+          for SERVICE in "${SERVICES[@]}"; do
+            echo "Updating ${SERVICE} to tag: ${NEW_TAG}"
+            
+            # Update the image tag in the business-apps.yaml file
+            # This logic assumes a standard ArgoCD app structure or Helm values
+            # Adjust path if your structure is different
+            TARGET_FILE="config/argocd/business-apps.yaml"
+            
+            if [ -f "$TARGET_FILE" ]; then
+               # Simple sed replacement for demo purposes (robust enough for monorepo)
+               # Matches: image: harbor.phoenix.com/library/service-name:OLDTAG
+               sed -i "s|${HARBOR_REGISTRY}/${SERVICE}:.*|${HARBOR_REGISTRY}/${SERVICE}:${NEW_TAG}|g" "$TARGET_FILE" || true
+            fi
+          done
+
+      - name: Commit and push changes
+        run: |
+          git add config/
+          if git diff --staged --quiet; then
+            echo "ℹ️ No changes to commit"
+          else
+            git commit -m "🚀 Deploy: Update image tags to ${{ github.sha }}"
+            git push origin main
+          fi

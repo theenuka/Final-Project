@@ -1,0 +1,199 @@
+# Default values for microservice-chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Application name (override with --set name=my-service)
+name: ""
+namespace: default
+
+# Image configuration
+image:
+  repository: nginx
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Image pull secrets for private registries
+imagePullSecrets: []
+# - name: harbor-registry
+
+# Number of replicas
+replicaCount: 1
+
+# ServiceAccount configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod annotations
+podAnnotations:
+  # Enable Istio sidecar injection
+  sidecar.istio.io/inject: "true"
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+  annotations: {}
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Liveness probe configuration
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Readiness probe configuration
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Environment variables
+env: []
+# - name: DATABASE_URL
+#   value: "postgres://db:5432"
+# - name: API_KEY
+#   valueFrom:
+#     secretKeyRef:
+#       name: api-secrets
+#       key: api-key
+
+# ConfigMap volumes
+configMaps: []
+# - name: app-config
+#   mountPath: /config
+
+# Secret volumes
+secrets: []
+# - name: app-secrets
+#   mountPath: /secrets
+
+# Persistent volumes
+persistence:
+  enabled: false
+  storageClass: gp3
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  mountPath: /data
+
+# Autoscaling configuration
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Ingress configuration
+ingress:
+  enabled: false
+  # Use Istio VirtualService or standard Kubernetes Ingress
+  type: virtualservice  # Options: virtualservice, ingress
+
+  # Istio VirtualService configuration
+  virtualService:
+    enabled: true
+    hosts:
+      - app.phoenix.com
+    gateway: istio-system/phoenix-gateway
+    http:
+      - match:
+          - uri:
+              prefix: /
+        route:
+          - destination:
+              port:
+                number: 80
+    # TLS configuration (optional)
+    tls: []
+
+  # Standard Kubernetes Ingress configuration (alternative)
+  standardIngress:
+    enabled: false
+    className: istio
+    annotations: {}
+    hosts:
+      - host: app.phoenix.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+
+# Istio-specific configuration
+istio:
+  # Enable Istio sidecar injection
+  injection: true
+  # Destination Rule for traffic policies
+  destinationRule:
+    enabled: false
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 100
+        http:
+          http1MaxPendingRequests: 50
+          http2MaxRequests: 100
+      outlierDetection:
+        consecutiveErrors: 5
+        interval: 30s
+        baseEjectionTime: 30s
+  # Authorization Policy
+  authorizationPolicy:
+    enabled: false
+    rules: []
+
+# Database configuration (for apps that need it)
+database:
+  enabled: false
+  type: postgresql  # postgresql, mysql, mongodb
+  host: ""
+  port: 5432
+  name: ""
+  username: ""
+  # Use secret for password
+  passwordSecret:
+    name: ""
+    key: password

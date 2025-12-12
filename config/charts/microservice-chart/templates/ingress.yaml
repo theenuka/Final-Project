@@ -1,0 +1,67 @@
+{{- if .Values.ingress.enabled }}
+{{- if eq .Values.ingress.type "virtualservice" }}
+{{- if .Values.ingress.virtualService.enabled }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "microservice-chart.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "microservice-chart.labels" . | nindent 4 }}
+spec:
+  hosts:
+    {{- toYaml .Values.ingress.virtualService.hosts | nindent 4 }}
+  gateways:
+    - {{ .Values.ingress.virtualService.gateway }}
+  http:
+    {{- toYaml .Values.ingress.virtualService.http | nindent 4 }}
+  {{- with .Values.ingress.virtualService.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- else if eq .Values.ingress.type "ingress" }}
+{{- if .Values.ingress.standardIngress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "microservice-chart.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "microservice-chart.labels" . | nindent 4 }}
+  {{- with .Values.ingress.standardIngress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.standardIngress.className }}
+  {{- if .Values.ingress.standardIngress.tls }}
+  tls:
+    {{- range .Values.ingress.standardIngress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.standardIngress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "microservice-chart.fullname" $ }}
+                port:
+                  number: {{ $.Values.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

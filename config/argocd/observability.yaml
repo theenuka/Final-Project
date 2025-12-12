@@ -1,0 +1,378 @@
+---
+# Kube-Prometheus-Stack (Prometheus + Grafana + Alertmanager)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    targetRevision: 54.2.2
+    chart: kube-prometheus-stack
+    helm:
+      values: |
+        # Prometheus Configuration
+        prometheus:
+          prometheusSpec:
+            replicas: 2
+            retention: 30d
+            retentionSize: "50GB"
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp3
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 100Gi
+            resources:
+              requests:
+                cpu: 500m
+                memory: 2Gi
+              limits:
+                cpu: 2000m
+                memory: 4Gi
+            # Service monitors for Istio
+            additionalServiceMonitors:
+              - name: istio-component-monitor
+                selector:
+                  matchLabels:
+                    istio: pilot
+                namespaceSelector:
+                  matchNames:
+                    - istio-system
+                endpoints:
+                  - port: http-monitoring
+                    interval: 15s
+            # Scrape Istio sidecars
+            podMonitorSelector:
+              matchLabels:
+                prometheus: istio
+
+        # Grafana Configuration
+        grafana:
+          enabled: true
+          replicas: 2
+          adminPassword: "GrafanaAdmin123!"  # Change in production
+          persistence:
+            enabled: true
+            storageClassName: gp3
+            size: 10Gi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # Pre-installed dashboards
+          dashboardProviders:
+            dashboardproviders.yaml:
+              apiVersion: 1
+              providers:
+                - name: 'istio'
+                  orgId: 1
+                  folder: 'Istio'
+                  type: file
+                  disableDeletion: false
+                  editable: true
+                  options:
+                    path: /var/lib/grafana/dashboards/istio
+                - name: 'kubernetes'
+                  orgId: 1
+                  folder: 'Kubernetes'
+                  type: file
+                  disableDeletion: false
+                  editable: true
+                  options:
+                    path: /var/lib/grafana/dashboards/kubernetes
+          dashboards:
+            istio:
+              istio-mesh:
+                gnetId: 7639
+                revision: 127
+                datasource: Prometheus
+              istio-service:
+                gnetId: 7636
+                revision: 127
+                datasource: Prometheus
+              istio-workload:
+                gnetId: 7630
+                revision: 127
+                datasource: Prometheus
+            kubernetes:
+              cluster-monitoring:
+                gnetId: 15757
+                revision: 31
+                datasource: Prometheus
+              pod-monitoring:
+                gnetId: 15760
+                revision: 16
+                datasource: Prometheus
+
+        # Alertmanager Configuration
+        alertmanager:
+          alertmanagerSpec:
+            replicas: 2
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: gp3
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+
+        # Node Exporter
+        nodeExporter:
+          enabled: true
+
+        # Kube State Metrics
+        kubeStateMetrics:
+          enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        maxDuration: 5m
+
+---
+# Jaeger - Distributed Tracing
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jaeger
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://jaegertracing.github.io/helm-charts
+    targetRevision: 0.71.14
+    chart: jaeger
+    helm:
+      values: |
+        provisionDataStore:
+          cassandra: false
+          elasticsearch: true
+
+        # All-in-one deployment for simplicity (use production mode for scale)
+        allInOne:
+          enabled: true
+          replicas: 1
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+
+        # Storage backend
+        storage:
+          type: elasticsearch
+          elasticsearch:
+            host: elasticsearch
+            port: 9200
+            scheme: http
+            user: elastic
+            password: changeme
+
+        # Agent configuration
+        agent:
+          enabled: false
+
+        # Collector configuration
+        collector:
+          enabled: false
+          replicaCount: 2
+          service:
+            type: ClusterIP
+            zipkin:
+              port: 9411
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+        # Query UI
+        query:
+          enabled: false
+          replicaCount: 2
+          service:
+            type: ClusterIP
+            port: 80
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        maxDuration: 5m
+
+---
+# Kiali - Service Mesh Observability
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kiali
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kiali.org/helm-charts
+    targetRevision: 1.77.0
+    chart: kiali-server
+    helm:
+      values: |
+        auth:
+          strategy: "anonymous"  # Use OIDC/OAuth in production
+
+        deployment:
+          replicas: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+        # External services configuration
+        external_services:
+          prometheus:
+            url: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090
+          grafana:
+            url: http://kube-prometheus-stack-grafana.observability.svc.cluster.local:80
+            in_cluster_url: http://kube-prometheus-stack-grafana.observability.svc.cluster.local:80
+            auth:
+              type: basic
+              username: admin
+              password: GrafanaAdmin123!
+          tracing:
+            enabled: true
+            in_cluster_url: http://jaeger-query.observability.svc.cluster.local:16686
+            url: http://jaeger-query.observability.svc.cluster.local:16686
+            use_grpc: false
+
+        # Istio configuration
+        istio_namespace: istio-system
+
+        # Server configuration
+        server:
+          web_root: /kiali
+          port: 20001
+
+        # Kiali features
+        kiali_feature_flags:
+          istio_upgrade_action: true
+          istio_injection_action: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        maxDuration: 5m
+
+---
+# Elasticsearch for Jaeger (if needed for production)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: elasticsearch
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://helm.elastic.co
+    targetRevision: 8.5.1
+    chart: elasticsearch
+    helm:
+      values: |
+        replicas: 2
+        minimumMasterNodes: 1
+
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 1000m
+            memory: 4Gi
+
+        volumeClaimTemplate:
+          storageClassName: gp3
+          resources:
+            requests:
+              storage: 100Gi
+
+        esJavaOpts: "-Xmx2g -Xms2g"
+
+        # Security (disable for dev, enable for prod)
+        esConfig:
+          elasticsearch.yml: |
+            xpack.security.enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        maxDuration: 5m

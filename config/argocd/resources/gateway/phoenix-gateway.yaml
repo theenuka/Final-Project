@@ -1,0 +1,28 @@
+---
+# Main Phoenix Gateway - Handles all external traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: phoenix-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    # HTTP (port 80) - Redirect to HTTPS in production
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*.phoenix.com"
+    # HTTPS (port 443) - Main secure entry point
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: phoenix-tls-cert  # Secret with TLS cert
+      hosts:
+        - "*.phoenix.com"

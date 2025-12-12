@@ -1,0 +1,23 @@
+# Helm
+*.tgz
+.helmignore
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Secrets (never commit!)
+secrets/
+*.secret
+*.key
+*.pem

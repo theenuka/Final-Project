@@ -1,0 +1,26 @@
+# System Files
+.DS_Store
+.vscode/
+.idea/
+
+# Dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Terraform & Infrastructure State (NEVER PUSH THESE)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.ssh/
+id_rsa
+id_rsa.pub
+*.pem
+*.key
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+*.log

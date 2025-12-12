@@ -1,0 +1,405 @@
+---
+# Storage Class - GP3 Default
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: storage-class
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/phoenix/config
+    targetRevision: main
+    path: storage
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+
+---
+# AWS EBS CSI Driver
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-ebs-csi-driver
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes-sigs.github.io/aws-ebs-csi-driver
+    targetRevision: 2.25.0
+    chart: aws-ebs-csi-driver
+    helm:
+      values: |
+        controller:
+          replicaCount: 2
+          serviceAccount:
+            create: true
+            name: ebs-csi-controller-sa
+          region: us-east-1
+          enableVolumeScheduling: true
+          enableVolumeResizing: true
+          enableVolumeSnapshot: true
+        node:
+          tolerateAllTaints: true
+        storageClasses:
+          - name: ebs-gp3
+            annotations:
+              storageclass.kubernetes.io/is-default-class: "false"
+            provisioner: ebs.csi.aws.com
+            parameters:
+              type: gp3
+              encrypted: "true"
+            volumeBindingMode: WaitForFirstConsumer
+            allowVolumeExpansion: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+
+---
+# AWS Load Balancer Controller
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    targetRevision: 1.6.2
+    chart: aws-load-balancer-controller
+    helm:
+      values: |
+        clusterName: phoenix-cluster
+        serviceAccount:
+          create: true
+          name: aws-load-balancer-controller
+        region: us-east-1
+        vpcId: ""  # Auto-discovered from cluster
+        enableShield: false
+        enableWaf: false
+        enableWafv2: false
+        replicaCount: 2
+        resources:
+          limits:
+            cpu: 200m
+            memory: 500Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        podLabels:
+          app: aws-load-balancer-controller
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+
+---
+# Istio Base (CRDs and Core Resources)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: istio-base
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://istio-release.storage.googleapis.com/charts
+    targetRevision: 1.20.0
+    chart: base
+    helm:
+      values: |
+        defaultRevision: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: istio-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+
+---
+# Istio Control Plane (istiod)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: istiod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://istio-release.storage.googleapis.com/charts
+    targetRevision: 1.20.0
+    chart: istiod
+    helm:
+      values: |
+        global:
+          istioNamespace: istio-system
+        pilot:
+          replicaCount: 2
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          autoscaleEnabled: true
+          autoscaleMin: 2
+          autoscaleMax: 5
+          traceSampling: 1.0
+        meshConfig:
+          enableTracing: true
+          defaultConfig:
+            tracing:
+              zipkin:
+                address: jaeger-collector.observability.svc.cluster.local:9411
+          accessLogFile: /dev/stdout
+          accessLogEncoding: JSON
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: istio-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+
+---
+# Istio Ingress Gateway with AWS NLB
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: istio-ingressgateway
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://istio-release.storage.googleapis.com/charts
+    targetRevision: 1.20.0
+    chart: gateway
+    helm:
+      values: |
+        # CRITICAL: Configure for AWS NLB with Calico CNI compatibility
+        service:
+          type: LoadBalancer
+          ports:
+            - name: status-port
+              port: 15021
+              protocol: TCP
+              targetPort: 15021
+            - name: http2
+              port: 80
+              protocol: TCP
+              targetPort: 80
+            - name: https
+              port: 443
+              protocol: TCP
+              targetPort: 443
+          annotations:
+            # CRITICAL: Use external NLB (not classic)
+            service.beta.kubernetes.io/aws-load-balancer-type: "external"
+            # Internet-facing load balancer
+            service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+            # CRITICAL: Use instance target type (not IP) for Calico CNI
+            service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "instance"
+            # Enable cross-zone load balancing
+            service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+            # Health check configuration
+            service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "HTTP"
+            service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "15021"
+            service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/healthz/ready"
+            # Connection settings
+            service.beta.kubernetes.io/aws-load-balancer-connection-idle-timeout: "60"
+        replicaCount: 2
+        autoscaling:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 5
+          targetCPUUtilizationPercentage: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 2000m
+            memory: 1024Mi
+        podAnnotations:
+          prometheus.io/scrape: "true"
+          prometheus.io/port: "15020"
+          prometheus.io/path: "/stats/prometheus"
+        labels:
+          app: istio-ingressgateway
+          istio: ingressgateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: istio-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+
+---
+# Phoenix Gateway - Main Gateway Resource
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: phoenix-gateway
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/phoenix/config
+    targetRevision: main
+    path: argocd/resources/gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: istio-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+
+---
+# Harbor Container Registry
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: harbor
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://helm.goharbor.io
+    targetRevision: 1.13.1
+    chart: harbor
+    helm:
+      values: |
+        expose:
+          type: clusterIP
+          tls:
+            enabled: false
+        externalURL: https://harbor.phoenix.com
+        persistence:
+          enabled: true
+          persistentVolumeClaim:
+            registry:
+              storageClass: gp3
+              size: 100Gi
+            chartmuseum:
+              storageClass: gp3
+              size: 10Gi
+            jobservice:
+              jobLog:
+                storageClass: gp3
+                size: 5Gi
+            database:
+              storageClass: gp3
+              size: 10Gi
+            redis:
+              storageClass: gp3
+              size: 5Gi
+            trivy:
+              storageClass: gp3
+              size: 10Gi
+        harborAdminPassword: "HarborAdmin123!"  # Change in production
+        database:
+          type: internal
+        redis:
+          type: internal
+        trivy:
+          enabled: true
+        notary:
+          enabled: false
+        metrics:
+          enabled: true
+        portal:
+          replicas: 2
+        core:
+          replicas: 2
+        jobservice:
+          replicas: 2
+        registry:
+          replicas: 2
+        chartmuseum:
+          enabled: true
+          replicas: 2
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: harbor
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        maxDuration: 5m

@@ -1,0 +1,211 @@
+---
+# Hotel Microservices Namespace
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hotel-namespace
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/phoenix/config
+    targetRevision: main
+    path: argocd/resources/namespaces
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hotel
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Hotel Booking Service
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: booking-service
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/phoenix/app-code
+    targetRevision: main
+    path: deploy/k8s/booking-service
+    helm:
+      valueFiles:
+        - values.yaml
+      values: |
+        name: booking-service
+        namespace: hotel
+        replicaCount: 3
+        image:
+          repository: harbor.phoenix.com/hotel/booking-service
+          tag: latest
+          pullPolicy: Always
+        imagePullSecrets:
+          - name: harbor-registry
+        service:
+          port: 80
+          targetPort: 8080
+        ingress:
+          enabled: true
+          type: virtualservice
+          virtualService:
+            hosts:
+              - booking.phoenix.com
+            gateway: istio-system/phoenix-gateway
+            http:
+              - match:
+                  - uri:
+                      prefix: /api/booking
+                route:
+                  - destination:
+                      port:
+                        number: 80
+        database:
+          enabled: true
+          type: postgresql
+          host: postgres.database.svc.cluster.local
+          port: 5432
+          name: booking_db
+          username: booking_user
+          passwordSecret:
+            name: booking-db-secret
+            key: password
+        persistence:
+          enabled: true
+          size: 50Gi
+          mountPath: /data/bookings
+        autoscaling:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 10
+          targetCPUUtilizationPercentage: 70
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hotel
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+
+---
+# Hotel Room Service (Placeholder)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: room-service
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/phoenix/app-code
+    targetRevision: main
+    path: deploy/k8s/room-service
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hotel
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Hotel Payment Service (Placeholder)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: payment-service
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/phoenix/app-code
+    targetRevision: main
+    path: deploy/k8s/payment-service
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hotel
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Hotel Notification Service (Placeholder)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: notification-service
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/phoenix/app-code
+    targetRevision: main
+    path: deploy/k8s/notification-service
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hotel
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# API Gateway (Placeholder)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: api-gateway
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/phoenix/app-code
+    targetRevision: main
+    path: deploy/k8s/api-gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hotel
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

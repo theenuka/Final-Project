@@ -60,25 +60,24 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------------------------------
-      # STEP 2: Setup Node.js
+      # STEP 2: Setup Node.js (FIX: Removed Caching)
       # ------------------------------------------------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: ${{ matrix.path }}/package-lock.json
+          # Removed cache: 'npm' to prevent errors if package-lock.json is missing
 
       # ------------------------------------------------------------------------
-      # STEP 3: Install Dependencies
+      # STEP 3: Install Dependencies (FIX: Changed to npm install)
       # ------------------------------------------------------------------------
       - name: Install dependencies
         run: |
           echo "📦 Installing dependencies for ${{ matrix.name }}..."
-          npm ci
+          npm install
 
       # ------------------------------------------------------------------------
-      # STEP 4: Run Linting (Optional - continues on error)
+      # STEP 4: Run Linting
       # ------------------------------------------------------------------------
       - name: Run ESLint
         run: |

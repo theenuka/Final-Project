@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  # Backend services with local code mounts for live-reloading
+  identity-service:
+    volumes:
+      - ./backend/services/identity-service:/workspace/backend/services/identity-service
+      - ./shared:/workspace/shared
+  hotel-service:
+    volumes:
+      - ./backend/services/hotel-service:/workspace/backend/services/hotel-service
+      - ./shared:/workspace/shared
+  booking-service:
+    volumes:
+      - ./backend/services/booking-service:/workspace/backend/services/booking-service
+      - ./shared:/workspace/shared
+  search-service:
+    volumes:
+      - ./backend/services/search-service:/workspace/backend/services/search-service
+      - ./shared:/workspace/shared
+  notification-service:
+    volumes:
+      - ./backend/services/notification-service:/workspace/backend/services/notification-service
+      - ./shared:/workspace/shared
+  api-gateway:
+    volumes:
+      - ./backend/services/api-gateway:/workspace/backend/services/api-gateway
+      - ./shared:/workspace/shared
+
+  # Frontend service with local code mount for live-reloading
+  frontend:
+    volumes:
+      - ./hotel-booking-frontend:/app
+      - /app/node_modules # Anonymous volume to prevent host node_modules from overwriting container's

@@ -1,0 +1,30 @@
+{
+  "name": "hotel-booking-microservices",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:gateway\" \"npm:dev:identity\" \"npm:dev:hotel\" \"npm:dev:booking\" \"npm:dev:search\" \"npm:dev:notify\"",
+    "dev:core": "concurrently -k \"npm:dev:gateway\" \"npm:dev:identity\" \"npm:dev:hotel\" \"npm:dev:search\"",
+    "kill:ports": "for p in 7008 7101 7102 7103 7104 7105; do lsof -ti tcp:$p | xargs -I {} kill -9 {} || true; done",
+    "setup:env": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/setup-env.ts",
+    "dev:gateway": "cd backend/services/api-gateway && npm run dev",
+    "dev:identity": "cd backend/services/identity-service && npm run dev",
+    "dev:hotel": "cd backend/services/hotel-service && npm run dev",
+    "dev:booking": "cd backend/services/booking-service && npm run dev",
+    "dev:search": "cd backend/services/search-service && npm run dev",
+    "dev:notify": "cd backend/services/notification-service && npm run dev",
+    "compose:up": "docker compose up -d",
+    "compose:down": "docker compose down -v",
+    "seed:local": "TS_NODE_TRANSPILE_ONLY=1 ts-node --compiler-options '{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' scripts/seed-local.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "concurrently": "^8.2.2",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "jose": "^6.1.2",
+    "mongoose": "^7.8.0"
+  }
+}

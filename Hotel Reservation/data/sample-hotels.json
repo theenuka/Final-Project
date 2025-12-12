@@ -1,0 +1,113 @@
+[
+  {
+    "name": "Aurora Sky Suites",
+    "city": "Reykjavík",
+    "country": "Iceland",
+    "description": "Glass-capped suites that float above Faxaflói Bay with heated floors, geothermal plunge pools, and rooftop observatories for chasing the northern lights.",
+    "type": ["Boutique", "Luxury"],
+    "facilities": ["Spa", "Sauna", "Private Chef", "Airport Shuttle", "Northern Lights Concierge"],
+    "starRating": 5,
+    "imageUrls": [
+      "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?auto=format&fit=crop&w=1600&q=80",
+      "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1600&q=80"
+    ],
+      "roomTypes": [
+        {
+          "name": "Observatory Suite",
+          "description": "Suite with a glass ceiling for prime Northern Lights viewing.",
+          "pricePerNight": 520,
+          "adultCount": 2,
+          "childCount": 1,
+          "amenities": ["WiFi", "Geothermal Plunge Pool", "Telescope"]
+        },
+        {
+          "name": "Deluxe Suite",
+          "description": "A spacious suite with a balcony.",
+          "pricePerNight": 350,
+          "adultCount": 2,
+          "childCount": 2,
+          "amenities": ["WiFi", "Balcony", "Mini Bar"]
+        },
+        {
+          "name": "Standard Suite",
+          "description": "A comfortable and modern suite.",
+          "pricePerNight": 250,
+          "adultCount": 2,
+          "childCount": 0,
+          "amenities": ["WiFi", "Desk"]
+        }
+      ],
+    "location": { "addressLine1": "12 Frost Street", "city": "Reykjavík", "country": "Iceland" },
+    "tags": ["northern lights", "glass suites"],
+    "isFeatured": true
+  },
+  {
+    "name": "Laguna Sol Residences",
+    "city": "Tulum",
+    "country": "Mexico",
+    "description": "Jungle-canopied villas with cenote-fed plunge pools, mezcal butler service, and beach cruisers that unlock the Sian Ka'an Reserve.",
+    "type": ["Resort", "Wellness"],
+    "facilities": ["Private Beach", "Wellness Studio", "In-Villa Dining", "Kids Club"],
+    "starRating": 5,
+    "imageUrls": [ "https://images.unsplash.com/photo-1501117716987-c8e1ecb210cc?auto=format&fit=crop&w=1600&q=80" ],
+    "roomTypes": [
+      {
+        "name": "Jungle Villa",
+        "description": "A villa surrounded by jungle.",
+        "pricePerNight": 410,
+        "adultCount": 3,
+        "childCount": 2,
+        "amenities": ["WiFi", "Plunge Pool"]
+      }
+    ],
+    "location": { "addressLine1": "Km 8 Boca Paila", "city": "Tulum", "country": "Mexico" },
+    "tags": ["cenote", "jungle boardwalk"],
+    "isFeatured": true
+  },
+  {
+    "name": "Atlas Heritage Riad",
+    "city": "Marrakesh",
+    "country": "Morocco",
+    "description": "Restored 18th-century riad with hand-carved cedar suites, spice market cooking lab, and Atlas Mountain sunrise transfers.",
+    "type": ["Riad", "Cultural"],
+    "facilities": ["Rooftop Pool", "Hammam", "Tea Salon", "Guided Souk Tours"],
+    "starRating": 4,
+    "imageUrls": [ "https://images.unsplash.com/photo-1469980098053-382eb10ba017?auto=format&fit=crop&w=1600&q=80" ],
+    "roomTypes": [
+      {
+        "name": "Cedar Suite",
+        "description": "A suite with hand-carved cedar.",
+        "pricePerNight": 265,
+        "adultCount": 4,
+        "childCount": 1,
+        "amenities": ["WiFi", "Hammam Access"]
+      }
+    ],
+    "location": { "addressLine1": "Derb Debachi 91", "city": "Marrakesh", "country": "Morocco" },
+    "tags": ["riad", "medina"],
+    "isFeatured": false
+  },
+  {
+    "name": "Harbor & Hearth Club",
+    "city": "Seattle",
+    "country": "United States",
+    "description": "Cloud-level residences inside a reimagined pier warehouse featuring tasting counters by James Beard alumni and private hydrofoil tours of Puget Sound.",
+    "type": ["Urban", "Residence"],
+    "facilities": ["Chef Counter", "Wellness Floor", "Cinema", "EV Fleet"],
+    "starRating": 5,
+    "imageUrls": [ "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=1600&q=80" ],
+    "roomTypes": [
+      {
+        "name": "Pier Residence",
+        "description": "A residence with a view of the pier.",
+        "pricePerNight": 340,
+        "adultCount": 2,
+        "childCount": 1,
+        "amenities": ["WiFi", "Tasting Counter"]
+      }
+    ],
+    "location": { "addressLine1": "Pier 57, Alaskan Way", "city": "Seattle", "state": "WA", "country": "United States" },
+    "tags": ["waterfront", "culinary"],
+    "isFeatured": false
+  }
+]

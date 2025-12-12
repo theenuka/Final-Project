@@ -1,0 +1,176 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: hotel-booking-mongo
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_DATABASE: hotel-booking
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 })' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: hotel-booking-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: hotel-booking-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: backend/services/identity-service/Dockerfile
+    env_file:
+      - backend/.env.docker
+    environment:
+      PORT: 7102
+    depends_on:
+      mongo:
+        condition: service_started
+    restart: unless-stopped
+    ports:
+      - "7102:7102"
+
+  hotel-service:
+    build:
+      context: .
+      dockerfile: backend/services/hotel-service/Dockerfile
+    env_file:
+      - backend/.env.docker
+    environment:
+      PORT: 7103
+    depends_on:
+      mongo:
+        condition: service_started
+      identity-service:
+        condition: service_started
+    restart: unless-stopped
+    ports:
+      - "7103:7103"
+
+  booking-service:
+    build:
+      context: .
+      dockerfile: backend/services/booking-service/Dockerfile
+    env_file:
+      - backend/.env.docker
+    environment:
+      PORT: 7104
+    depends_on:
+      mongo:
+        condition: service_started
+      identity-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+
+    restart: unless-stopped
+    ports:
+      - "7104:7104"
+
+  search-service:
+    build:
+      context: .
+      dockerfile: backend/services/search-service/Dockerfile
+    env_file:
+      - backend/.env.docker
+    environment:
+      PORT: 7105
+    depends_on:
+      mongo:
+        condition: service_started
+    restart: unless-stopped
+    ports:
+      - "7105:7105"
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: backend/services/notification-service/Dockerfile
+    env_file:
+      - backend/.env.docker
+    environment:
+      PORT: 7101
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    restart: unless-stopped
+    ports:
+      - "7101:7101"
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: backend/services/api-gateway/Dockerfile
+    env_file:
+      - backend/.env.docker
+    environment:
+      PORT: 7008
+    depends_on:
+      identity-service:
+        condition: service_started
+      hotel-service:
+        condition: service_started
+      booking-service:
+        condition: service_started
+      search-service:
+        condition: service_started
+    restart: unless-stopped
+    ports:
+      - "7008:7008"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: hotel-booking-frontend/Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://api-gateway:7008 # Use service name for inter-container communication
+      VITE_ASGARDEO_CLIENT_ID: iYcA_MO8LwTND_hvunAg8VvBHDua # Replace with your actual client ID
+      VITE_ASGARDEO_BASE_URL: https://api.asgardeo.io/t/theenukagranex # Replace with your actual Asgardeo URL
+      VITE_ASGARDEO_SIGN_IN_REDIRECT: http://localhost:4173
+      VITE_ASGARDEO_SIGN_OUT_REDIRECT: http://localhost:4173
+      VITE_ASGARDEO_SCOPES: "openid profile email"
+      VITE_STRIPE_PUB_KEY: pk_test_XXXXXXXXXXXXXXXXXXXXXXXX # Replace with your actual Stripe Publishable Key
+    depends_on:
+      api-gateway:
+        condition: service_started
+    restart: unless-stopped
+    ports:
+      - "4173:4173"
+
+volumes:
+  mongo-data:
